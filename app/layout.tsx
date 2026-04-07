@@ -4,6 +4,7 @@ import "./globals.css";
 import { cn } from "@/lib/utils";
 import { SessionProvider } from "next-auth/react";
 import { auth } from "@/auth";
+import { ThemeProvider } from "@/components/providers/theme-providers";
 
 const jetbrainsMono = JetBrains_Mono({
   subsets: ["latin"],
@@ -36,6 +37,7 @@ export default async function RootLayout({
     <SessionProvider session={session}>
       <html
         lang="en"
+        suppressHydrationWarning
         className={cn(
           "h-full",
           "antialiased",
@@ -45,7 +47,16 @@ export default async function RootLayout({
           jetbrainsMono.variable,
         )}
       >
-        <body className="min-h-full flex flex-col">{children}</body>
+        <body className="min-h-full flex flex-col">
+          <ThemeProvider
+            attribute="class"
+            defaultTheme="dark"
+            enableSystem
+            disableTransitionOnChange
+          >
+            {children}
+          </ThemeProvider>
+        </body>
       </html>
     </SessionProvider>
   );
