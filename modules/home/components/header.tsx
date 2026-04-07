@@ -36,8 +36,9 @@ export function Header() {
                     <Image
                       src={"/logo.svg"}
                       alt="Logo"
-                      height={60}
-                      width={60}
+                      width={960}
+                      height={743}
+                      className="h-auto w-15"
                     />
 
                     <span className="hidden sm:block font-extrabold text-lg">
