@@ -23,8 +23,8 @@ model User {
   accounts      Account[]
   role          UserRole  @default(USER) // this is for future features, not used in this project
 
-  myPlayground      StarMark[]
-  starredPlayground Playground[] // what does this mean? why does myPlayground reference StarMark instead of Playground?
+  myPlayground      Playground[]
+  starredPlayground StarMark[]
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -83,5 +83,5 @@ model StarMark {
   user         User       @relation(fields: [userId], references: [id], onDelete: Cascade)
   playground   Playground @relation(fields: [playgroundId], references: [id], onDelete: Cascade)
 
-  @@unique([userId, playgroundId])
+  @@unique([userId, playgroundId]) // what does @@unique mean? - a single user can only mark a playground as favourite once, cannot mark it several times?
 }

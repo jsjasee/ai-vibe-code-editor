@@ -26,7 +26,7 @@ export default async function DashboardLayout({
     id: item.id,
     name: item.title,
     // todo: star
-    starred: false,
+    starred: item.Starmark?.[0]?.isMarked || false,
     icon: technologyIconMap[item.template] || "Code2", // "code2" icon is the default template not found
   }));
 
