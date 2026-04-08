@@ -53,6 +53,7 @@ import {
   Eye,
 } from "lucide-react";
 import { toast } from "sonner";
+import { MarkedToggleButton } from "./toggle-star";
 
 interface ProjectTableProps {
   projects: Project[];
@@ -61,7 +62,7 @@ interface ProjectTableProps {
     data: { title: string; description: string },
   ) => Promise<void>;
   onDeleteProject?: (id: string) => Promise<void>;
-  onDuplicateProject?: (id: string) => Promise<void>;
+  onDuplicateProject?: (id: string) => Promise<any>;
   onMarkasFavorite?: (id: string) => Promise<void>;
 }
 
@@ -87,16 +88,38 @@ export default function ProjectTable({
   const [isLoading, setIsLoading] = useState(false);
   const [favoutrie, setFavourite] = useState(false);
 
+  // first two methods for opening dialog, last 2 methods aka the async await is for performing server action
+
   const handleEditClick = (project: Project) => {
-    //    Write your logic here
+    setSelectedProject(project);
+    setEditData({
+      title: project.title,
+      description: project.description || "",
+    });
+    setEditDialogOpen(true);
   };
 
   const handleDeleteClick = async (project: Project) => {
-    //    Write your logic here
+    setSelectedProject(project);
+
+    setDeleteDialogOpen(true);
   };
 
   const handleUpdateProject = async () => {
-    //    Write your logic here
+    if (!selectedProject || !onUpdateProject) return;
+
+    setIsLoading(true);
+
+    try {
+      await onUpdateProject(selectedProject.id, editData);
+      setEditDialogOpen(false);
+      toast.success("Project updated successfully.");
+    } catch (error) {
+      toast.error("Failed to updated project");
+      console.error("Error updating project: ", error);
+    } finally {
+      setIsLoading(false);
+    }
   };
 
   const handleMarkasFavorite = async (project: Project) => {
@@ -104,15 +127,43 @@ export default function ProjectTable({
   };
 
   const handleDeleteProject = async () => {
-    //    Write your logic here
+    if (!selectedProject || !onDeleteProject) return;
+
+    setIsLoading(true);
+    try {
+      await onDeleteProject(selectedProject.id);
+      setDeleteDialogOpen(false);
+      setSelectedProject(null);
+      toast.success("Project deleted successfully");
+    } catch (error) {
+      toast.error("Failed to delete project");
+      console.error("Error deleting project:", error);
+    } finally {
+      setIsLoading(false);
+    }
   };
 
   const handleDuplicateProject = async (project: Project) => {
     //    Write your logic here
+    if (!onDuplicateProject) return;
+
+    setIsLoading(true);
+    try {
+      await onDuplicateProject(project.id);
+      toast.success("Project duplicated successfully");
+    } catch (error) {
+      toast.error("Failed to duplicate project");
+      console.error("Error duplicating project:", error);
+    } finally {
+      setIsLoading(false);
+    }
   };
 
   const copyProjectUrl = (projectId: string) => {
     //    Write your logic here
+    const url = `${window.location.origin}/playground/${projectId}`; // window.location.origin copies the domain like example.com?
+    navigator.clipboard.writeText(url);
+    toast.success("Project URL copied to clipboard");
   };
 
   return (
@@ -179,10 +230,10 @@ export default function ProjectTable({
                     </DropdownMenuTrigger>
                     <DropdownMenuContent align="end" className="w-48">
                       <DropdownMenuItem asChild>
-                        {/* <MarkedToggleButton
+                        <MarkedToggleButton
                           markedForRevision={project.Starmark[0]?.isMarked}
                           id={project.id}
-                        /> */}
+                        />
                       </DropdownMenuItem>
                       <DropdownMenuItem asChild>
                         <Link
