@@ -48,13 +48,16 @@ export const useWebContainer = ({
     }
 
     initializeWebContainer();
+    console.log("⭐️ initialising web container");
 
-    return () => {
-      mounted = false;
-      if (instance) {
-        instance.teardown();
-      }
-    };
+    // return () => {
+    //   mounted = false;
+    //   if (instance) {
+    //     console.log("❌ tearing down web container...");
+
+    //     instance.teardown();
+    //   }
+    // };
   }, []);
 
   // this function allows us to see the output in real time as code is typed.

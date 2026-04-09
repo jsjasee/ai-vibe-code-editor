@@ -31,6 +31,7 @@ import {
 } from "@/components/ui/resizable";
 import PlaygroundEditor from "@/modules/playground/components/playground-editor";
 import { useWebContainer } from "@/modules/webcontainers/hooks/useWebContainer";
+import WebContainerPreview from "@/modules/webcontainers/components/webcontainer-preview";
 
 function MainPlaygroundPage() {
   const { id } = useParams<{ id: string }>();
@@ -238,7 +239,7 @@ function MainPlaygroundPage() {
                         <ResizableHandle />
                         <ResizablePanel defaultSize={50}>
                           <WebContainerPreview
-                            templateData={templateData}
+                            templateData={templateData!}
                             instance={instance}
                             writeFileSync={writeFileSync}
                             isLoading={containerLoading}
