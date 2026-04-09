@@ -10,6 +10,7 @@ export const getPlaygroundById = async (id: string) => {
       where: { id },
       select: {
         templateFiles: {
+          title: true,
           select: {
             content: true,
           },

@@ -9,7 +9,7 @@ import { getPlaygroundById, SaveUpdatedCode } from "../actions";
 
 interface PlaygroundData {
   id: string;
-  name?: string;
+  title?: string;
   [key: string]: any;
 }
 
@@ -43,7 +43,7 @@ export const usePlayground = (id: string): UsePlaygroundReturn => {
       //   @ts-ignore
       setPlaygroundData(data);
 
-      const rawContent = data?.templateFiles?.[0]?.content;
+      const rawContent = data?.templateFiles?.content;
       if (typeof rawContent === "string") {
         const parsedContent = JSON.parse(rawContent);
         setTemplateData(parsedContent);
