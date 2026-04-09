@@ -2,11 +2,14 @@
 import { usePlayground } from "@/modules/playground/hooks/usePlayground";
 import { Tooltip } from "@/components/ui/tooltip";
 import { useParams } from "next/navigation";
-import React from "react";
+import React, { useEffect } from "react";
 import { SidebarInset, SidebarTrigger } from "@/components/ui/sidebar";
 import { Separator } from "react-resizable-panels";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { TemplateFileTree } from "@/modules/playground/components/playground-explorer";
+import { useFileExplorer } from "@/modules/playground/hooks/useFileExplorer";
+import { TemplateFile } from "@/lib/generated/prisma/client";
+import { TemplateFile as TF } from "@/modules/playground/lib/path-to-json"; // why is there 2 templatefile??
 
 function MainPlaygroundPage() {
   const { id } = useParams<{ id: string }>();
@@ -14,10 +17,40 @@ function MainPlaygroundPage() {
   const { playgroundData, templateData, isLoading, error, saveTemplateData } =
     usePlayground(id);
 
+  const {
+    activeFileId,
+    closeAllFiles,
+    openFile,
+    closeFile,
+    editorContent,
+    openFiles,
+    setTemplateData,
+    setActiveFileId,
+    setPlaygroundId,
+    setOpenFiles,
+  } = useFileExplorer(); // access our zustand store
+
+  // Set template data when playground loads
+  useEffect(() => {
+    setPlaygroundId(id);
+  }, [id, setPlaygroundId]);
+
+  // Initialize zustand templateData from usePlayground only on first load
+  useEffect(() => {
+    if (templateData && !openFiles.length) {
+      setTemplateData(templateData);
+    }
+  }, [templateData, setTemplateData, openFiles.length]);
+
   console.log("template data: ", templateData);
   console.log("playground data: ", playgroundData);
 
-  const activeFile = "sample.txt";
+  const activeFile = openFiles.find((file) => file.id === activeFileId);
+  const hasUnsavedChanges = openFiles.some((file) => file.hasUnsavedChanges); // new keyword some?
+
+  const handleFileSelect = (file: TF) => {
+    openFile(file);
+  };
 
   return (
     // what even is tooltipprovider used for?
@@ -25,7 +58,7 @@ function MainPlaygroundPage() {
       <>
         <TemplateFileTree
           data={templateData!}
-          onFileSelect={() => {}}
+          onFileSelect={handleFileSelect}
           selectedFile={activeFile}
           title="File Explorer"
           onAddFile={() => {}}
