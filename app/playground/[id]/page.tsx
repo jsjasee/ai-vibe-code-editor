@@ -46,6 +46,7 @@ import WebContainerPreview from "@/modules/webcontainers/components/webcontainer
 import LoadingStep from "@/components/ui/loader";
 import { findFilePath } from "@/modules/playground/lib";
 import { toast } from "sonner";
+import ToggleAI from "@/modules/playground/components/toggle-ai";
 
 function MainPlaygroundPage() {
   const { id } = useParams<{ id: string }>();
@@ -419,6 +420,12 @@ function MainPlaygroundPage() {
                   </TooltipTrigger>
                   <TooltipContent>Save All (Ctrl+Shift+S)</TooltipContent>
                 </Tooltip>
+
+                <ToggleAI
+                  isEnabled={true}
+                  onToggle={() => {}}
+                  suggestionLoading={false}
+                />
 
                 <Button variant={"default"} size={"icon"}>
                   <Bot className="size-4" />
