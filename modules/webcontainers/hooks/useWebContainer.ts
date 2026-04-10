@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
 import { WebContainer } from "@webcontainer/api";
 import { TemplateFolder } from "@/modules/playground/lib/path-to-json";
 
@@ -10,7 +10,7 @@ interface UseWebContainerReturn {
   serverUrl: string | null;
   isLoading: boolean;
   error: string | null;
-  instance: WebContainer | null; // we can only run 1 webcontainer at a time.
+  instance: WebContainer | null;
   writeFileSync: (path: string, content: string) => Promise<void>;
   destroy: () => void; // Added destroy function
 }
@@ -22,15 +22,28 @@ export const useWebContainer = ({
   const [isLoading, setIsLoading] = useState<boolean>(true);
   const [error, setError] = useState<string | null>(null);
   const [instance, setInstance] = useState<WebContainer | null>(null);
+  const instanceRef = useRef<WebContainer | null>(null); // ADDED
 
   useEffect(() => {
-    let mounted = true; // what is this unmount mount thing and when will i use it?
+    let mounted = true;
 
     async function initializeWebContainer() {
       try {
-        const webcontainerInstance = await WebContainer.boot(); // from the webcontainer.io docs, this line of code can only run ONCE.
+        if (instanceRef.current) {
+          // ADDED
+          setInstance(instanceRef.current);
+          setIsLoading(false);
+          return;
+        }
+        const webcontainerInstance = await WebContainer.boot();
 
-        if (!mounted) return;
+        if (!mounted) {
+          // CHANGED
+          webcontainerInstance.teardown();
+          return;
+        }
+
+        instanceRef.current = webcontainerInstance; // ADDED
 
         setInstance(webcontainerInstance);
         setIsLoading(false);
@@ -48,19 +61,17 @@ export const useWebContainer = ({
     }
 
     initializeWebContainer();
-    console.log("⭐️ initialising web container");
 
-    // return () => {
-    //   mounted = false;
-    //   if (instance) {
-    //     console.log("❌ tearing down web container...");
-
-    //     instance.teardown();
-    //   }
-    // };
+    return () => {
+      mounted = false;
+      if (instanceRef.current) {
+        // CHANGED
+        instanceRef.current.teardown();
+        instanceRef.current = null;
+      }
+    };
   }, []);
 
-  // this function allows us to see the output in real time as code is typed.
   const writeFileSync = useCallback(
     async (path: string, content: string): Promise<void> => {
       if (!instance) {
@@ -90,12 +101,14 @@ export const useWebContainer = ({
 
   // Added destroy function
   const destroy = useCallback(() => {
-    if (instance) {
-      instance.teardown();
+    if (instanceRef.current) {
+      // CHANGED
+      instanceRef.current.teardown();
+      instanceRef.current = null;
       setInstance(null);
       setServerUrl(null);
     }
-  }, [instance]);
+  }, []);
 
   return { serverUrl, isLoading, error, instance, writeFileSync, destroy };
 };
