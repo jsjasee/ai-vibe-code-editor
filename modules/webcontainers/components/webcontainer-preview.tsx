@@ -5,17 +5,20 @@ import type { TemplateFolder } from "@/modules/playground/lib/path-to-json";
 import { transformToWebContainerFormat } from "../hooks/transformer";
 import { CheckCircle, Loader2, XCircle } from "lucide-react";
 import { Progress } from "@/components/ui/progress";
-import TerminalComponent from "./terminal";
-import { WebContainer } from "@webcontainer/api";
+import TerminalComponent, { type TerminalRef } from "./terminal";
+import {
+  WebContainer,
+  type Unsubscribe,
+  type WebContainerProcess,
+} from "@webcontainer/api";
 
 interface WebContainerPreviewProps {
   templateData: TemplateFolder;
-  serverUrl: string;
+  serverUrl: string | null;
   isLoading: boolean;
   error: string | null;
   instance: WebContainer | null;
-  writeFileSync: (path: string, content: string) => Promise<void>;
-  forceResetup?: boolean; // Optional prop to force re-setup
+  refreshToken?: number;
 }
 
 function WebContainerPreview({
@@ -24,8 +27,7 @@ function WebContainerPreview({
   instance,
   isLoading,
   serverUrl,
-  writeFileSync,
-  forceResetup = false,
+  refreshToken = 0,
 }: WebContainerPreviewProps) {
   // we need to convert our file data (templatefile) to how webcontainer accept the files. the webcontainer api receives file data in another format -> so we need another utility file called transformer
 
@@ -45,24 +47,122 @@ function WebContainerPreview({
   const [isSetupInProgress, setIsSetupInProgress] = useState(false);
 
   // Ref to access terminal methods
-  const terminalRef = useRef<any>(null);
+  const terminalRef = useRef<TerminalRef | null>(null);
+  const serverProcessRef = useRef<WebContainerProcess | null>(null);
+  const serverReadyUnsubscribeRef = useRef<Unsubscribe | null>(null);
 
-  // Reset setup state when forceResetup changes
+  const resetLoadingState = () => {
+    setLoadingState({
+      transforming: false,
+      mounting: false,
+      installing: false,
+      starting: false,
+      ready: false,
+    });
+  };
+
+  const cleanupServerReadyListener = () => {
+    serverReadyUnsubscribeRef.current?.();
+    serverReadyUnsubscribeRef.current = null;
+  };
+
+  const stopServerProcess = async () => {
+    cleanupServerReadyListener();
+
+    const activeProcess = serverProcessRef.current;
+    if (!activeProcess) return;
+
+    serverProcessRef.current = null;
+    activeProcess.kill();
+
+    try {
+      await activeProcess.exit;
+    } catch (error) {
+      console.error("Failed while waiting for the server process to stop:", error);
+    }
+  };
+
+  const startServer = async (container: WebContainer) => {
+    setLoadingState((prev) => ({
+      ...prev,
+      transforming: false,
+      mounting: false,
+      installing: false,
+      starting: true,
+      ready: false,
+    }));
+    setCurrentStep(4);
+
+    if (terminalRef.current?.writeToTerminal) {
+      terminalRef.current.writeToTerminal(
+        "🚀 Starting development server...\r\n",
+      );
+    }
+
+    cleanupServerReadyListener();
+    serverReadyUnsubscribeRef.current = container.on(
+      "server-ready",
+      (port: number, url: string) => {
+        console.log(`Server ready on port ${port} at ${url}`);
+        if (terminalRef.current?.writeToTerminal) {
+          terminalRef.current.writeToTerminal(`🌐 Server ready at ${url}\r\n`);
+        }
+
+        setPreviewUrl(url);
+        setLoadingState((prev) => ({
+          ...prev,
+          starting: false,
+          ready: true,
+        }));
+        setIsSetupComplete(true);
+        setIsSetupInProgress(false);
+      },
+    );
+
+    const startProcess = await container.spawn("npm", ["run", "start"]);
+    serverProcessRef.current = startProcess;
+    terminalRef.current?.attachProcess(startProcess);
+
+    void startProcess.output
+      .pipeTo(
+        new WritableStream({
+          write(data) {
+            if (terminalRef.current?.writeToTerminal) {
+              terminalRef.current.writeToTerminal(data);
+            }
+          },
+        }),
+      )
+      .catch(() => {});
+
+    void startProcess.exit.then((exitCode) => {
+      if (serverProcessRef.current === startProcess) {
+        serverProcessRef.current = null;
+      }
+
+      if (exitCode !== 0 && terminalRef.current?.writeToTerminal) {
+        terminalRef.current.writeToTerminal(
+          `❌ Development server stopped with exit code ${exitCode}\r\n`,
+        );
+      }
+    });
+  };
+
+  // Reset setup state when a save asks us to rebuild the preview.
   useEffect(() => {
-    if (forceResetup) {
+    async function resetPreview() {
+      if (refreshToken === 0) return;
+
+      await stopServerProcess();
       setIsSetupComplete(false);
       setIsSetupInProgress(false);
       setPreviewUrl("");
       setCurrentStep(0);
-      setLoadingState({
-        transforming: false,
-        mounting: false,
-        installing: false,
-        starting: false,
-        ready: false,
-      });
+      resetLoadingState();
     }
-  }, [forceResetup]);
+
+    void resetPreview();
+  }, [refreshToken]);
 
   useEffect(() => {
     async function setupContainer() {
@@ -73,40 +173,32 @@ function WebContainerPreview({
         setIsSetupInProgress(true);
         setSetupError(null);
 
-        // Check if server is already running by testing if files are already mounted
+        if (serverUrl) {
+          setPreviewUrl(serverUrl);
+          setLoadingState((prev) => ({
+            ...prev,
+            starting: false,
+            ready: true,
+          }));
+          setCurrentStep(4);
+          setIsSetupComplete(true);
+          setIsSetupInProgress(false);
+          return;
+        }
+
+        // If files are already there, we only need to boot the server again.
         try {
           const packageJsonExists = await instance.fs.readFile(
             "package.json",
             "utf8",
           );
           if (packageJsonExists) {
-            // Files are already mounted, just reconnect to existing server (since package.json file is already there)
             if (terminalRef.current?.writeToTerminal) {
               terminalRef.current.writeToTerminal(
-                "🔄 Reconnecting to existing WebContainer session...\r\n",
+                "🔄 Reusing mounted project files...\r\n",
               );
             }
-
-            // Check if server is already running
-            instance.on("server-ready", (port: number, url: string) => {
-              console.log(`Reconnected to server on port ${port} at ${url}`);
-              if (terminalRef.current?.writeToTerminal) {
-                terminalRef.current.writeToTerminal(
-                  `🌐 Reconnected to server at ${url}\r\n`,
-                );
-              }
-              setPreviewUrl(url);
-              setLoadingState((prev) => ({
-                ...prev,
-                starting: false,
-                ready: true,
-              }));
-              setIsSetupComplete(true);
-              setIsSetupInProgress(false);
-            });
-
-            setCurrentStep(4);
-            setLoadingState((prev) => ({ ...prev, starting: true }));
+            await startServer(instance);
             return;
           }
         } catch (e) {
@@ -166,16 +258,18 @@ function WebContainerPreview({
         const installProcess = await instance.spawn("npm", ["install"]); // this is how to execute command in webcontainers
 
         // Stream install output to terminal
-        installProcess.output.pipeTo(
-          new WritableStream({
-            write(data) {
-              // Write directly to terminal
-              if (terminalRef.current?.writeToTerminal) {
-                terminalRef.current.writeToTerminal(data);
-              }
-            },
-          }),
-        );
+        void installProcess.output
+          .pipeTo(
+            new WritableStream({
+              write(data) {
+                // Write directly to terminal
+                if (terminalRef.current?.writeToTerminal) {
+                  terminalRef.current.writeToTerminal(data);
+                }
+              },
+            }),
+          )
+          .catch(() => {});
 
         const installExitCode = await installProcess.exit;
 
@@ -191,50 +285,7 @@ function WebContainerPreview({
           );
         }
 
-        setLoadingState((prev) => ({
-          ...prev,
-          installing: false,
-          starting: true,
-        }));
-        setCurrentStep(4);
-
-        // Step 4: Start the server
-        if (terminalRef.current?.writeToTerminal) {
-          terminalRef.current.writeToTerminal(
-            "🚀 Starting development server...\r\n",
-          );
-        }
-
-        const startProcess = await instance.spawn("npm", ["run", "start"]);
-
-        // Listen for server ready event
-        instance.on("server-ready", (port: number, url: string) => {
-          console.log(`Server ready on port ${port} at ${url}`);
-          if (terminalRef.current?.writeToTerminal) {
-            terminalRef.current.writeToTerminal(
-              `🌐 Server ready at ${url}\r\n`,
-            );
-          }
-          setPreviewUrl(url);
-          setLoadingState((prev) => ({
-            ...prev,
-            starting: false,
-            ready: true,
-          }));
-          setIsSetupComplete(true);
-          setIsSetupInProgress(false);
-        });
-
-        // Handle start process output - stream to terminal
-        startProcess.output.pipeTo(
-          new WritableStream({
-            write(data) {
-              if (terminalRef.current?.writeToTerminal) {
-                terminalRef.current.writeToTerminal(data);
-              }
-            },
-          }),
-        );
+        await startServer(instance);
       } catch (err) {
         console.error("Error setting up container:", err);
         const errorMessage = err instanceof Error ? err.message : String(err);
@@ -245,24 +296,16 @@ function WebContainerPreview({
 
         setSetupError(errorMessage);
         setIsSetupInProgress(false);
-        setLoadingState({
-          transforming: false,
-          mounting: false,
-          installing: false,
-          starting: false,
-          ready: false,
-        });
+        resetLoadingState();
       }
     }
 
     setupContainer();
-  }, [instance, templateData, isSetupComplete, isSetupInProgress]);
+  }, [instance, templateData, isSetupComplete, isSetupInProgress, serverUrl]);
 
-  // Cleanup function to prevent memory leaks
   useEffect(() => {
     return () => {
-      // Don't kill processes or cleanup when component unmounts
-      // The WebContainer should persist across component re-mounts
+      void stopServerProcess();
     };
   }, []);
 

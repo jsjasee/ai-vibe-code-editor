@@ -50,6 +50,7 @@ import { toast } from "sonner";
 function MainPlaygroundPage() {
   const { id } = useParams<{ id: string }>();
   const [isPreviewVisible, setIsPreviewVisible] = useState(false);
+  const [previewRefreshToken, setPreviewRefreshToken] = useState(0);
 
   const { playgroundData, templateData, isLoading, error, saveTemplateData } =
     usePlayground(id);
@@ -244,6 +245,9 @@ function MainPlaygroundPage() {
             : f,
         );
         setOpenFiles(updatedOpenFiles);
+        if (isPreviewVisible) {
+          setPreviewRefreshToken((currentToken) => currentToken + 1);
+        }
 
         toast.success(
           `Saved ${fileToSave.filename}.${fileToSave.fileExtension}`,
@@ -264,6 +268,8 @@ function MainPlaygroundPage() {
       saveTemplateData,
       setTemplateData,
       setOpenFiles,
+      isPreviewVisible,
+      setPreviewRefreshToken,
     ],
   );
 
@@ -512,11 +518,10 @@ function MainPlaygroundPage() {
                           <WebContainerPreview
                             templateData={templateData!}
                             instance={instance}
-                            writeFileSync={writeFileSync}
                             isLoading={containerLoading}
                             error={containerError}
                             serverUrl={serverUrl!}
-                            forceResetup={false}
+                            refreshToken={previewRefreshToken}
                           />
                         </ResizablePanel>
                       </>

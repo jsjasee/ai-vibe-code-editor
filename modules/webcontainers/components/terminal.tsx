@@ -17,12 +17,13 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Search, Copy, Trash2, Download } from "lucide-react";
 import { cn } from "@/lib/utils";
+import type { WebContainer, WebContainerProcess } from "@webcontainer/api";
 
 interface TerminalProps {
   webcontainerUrl?: string;
   className?: string;
   theme?: "dark" | "light";
-  webContainerInstance?: any;
+  webContainerInstance?: WebContainer | null;
 }
 
 // Define the methods that will be exposed through the ref
@@ -30,6 +31,7 @@ export interface TerminalRef {
   writeToTerminal: (data: string) => void;
   clearTerminal: () => void;
   focusTerminal: () => void;
+  attachProcess: (process: WebContainerProcess) => void;
 }
 
 const TerminalComponent = forwardRef<TerminalRef, TerminalProps>(
@@ -50,8 +52,8 @@ const TerminalComponent = forwardRef<TerminalRef, TerminalProps>(
     const cursorPosition = useRef<number>(0);
     const commandHistory = useRef<string[]>([]);
     const historyIndex = useRef<number>(-1);
-    const currentProcess = useRef<any>(null);
-    const shellProcess = useRef<any>(null);
+    const currentProcess = useRef<WebContainerProcess | null>(null);
+    const shellProcess = useRef<WebContainerProcess | null>(null);
 
     const terminalThemes = {
       dark: {
@@ -110,6 +112,14 @@ const TerminalComponent = forwardRef<TerminalRef, TerminalProps>(
       }
     }, []);
 
+    const clearTerminal = useCallback(() => {
+      if (term.current) {
+        term.current.clear();
+        term.current.writeln("🚀 WebContainer Terminal");
+        writePrompt();
+      }
+    }, [writePrompt]);
+
     // Expose methods through ref
     useImperativeHandle(ref, () => ({
       writeToTerminal: (data: string) => {
@@ -124,6 +134,9 @@ const TerminalComponent = forwardRef<TerminalRef, TerminalProps>(
         if (term.current) {
           term.current.focus();
         }
+      },
+      attachProcess: (process: WebContainerProcess) => {
+        currentProcess.current = process;
       },
     }));
 
@@ -189,12 +202,12 @@ const TerminalComponent = forwardRef<TerminalRef, TerminalProps>(
           );
 
           // Wait for process to complete
-          const exitCode = await process.exit;
+          await process.exit;
           currentProcess.current = null;
 
           // Show new prompt
           writePrompt();
-        } catch (error) {
+        } catch {
           if (term.current) {
             term.current.writeln(`\r\nCommand not found: ${command}`);
             writePrompt();
@@ -356,14 +369,6 @@ const TerminalComponent = forwardRef<TerminalRef, TerminalProps>(
         console.error("WebContainer connection error:", error);
       }
     }, [webContainerInstance, writePrompt]);
-
-    const clearTerminal = useCallback(() => {
-      if (term.current) {
-        term.current.clear();
-        term.current.writeln("🚀 WebContainer Terminal");
-        writePrompt();
-      }
-    }, [writePrompt]);
 
     const copyTerminalContent = useCallback(async () => {
       if (term.current) {

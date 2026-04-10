@@ -64,11 +64,6 @@ export const useWebContainer = ({
 
     return () => {
       mounted = false;
-      if (instanceRef.current) {
-        // CHANGED
-        instanceRef.current.teardown();
-        instanceRef.current = null;
-      }
     };
   }, []);
 
