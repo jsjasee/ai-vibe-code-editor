@@ -24,90 +24,83 @@ export const useAISuggestions = (): UseAISuggestionsReturn => {
     decoration: [],
     isEnabled: true,
   });
+  const isFetchingRef = useRef(false);
+  const isEnabledRef = useRef(true);
 
   const toggleEnabled = useCallback(() => {
-    console.log("Toggling AI suggestions");
-    setState((prev) => ({ ...prev, isEnabled: !prev.isEnabled })); // what goes in the prev here? its not attached to any variable? (is it like useState?)
+    setState((prev) => {
+      const nextEnabled = !prev.isEnabled;
+      isEnabledRef.current = nextEnabled;
+
+      return {
+        ...prev,
+        isEnabled: nextEnabled,
+        suggestion: nextEnabled ? prev.suggestion : null,
+        position: nextEnabled ? prev.position : null,
+        decoration: nextEnabled ? prev.decoration : [],
+        isLoading: nextEnabled ? prev.isLoading : false,
+      };
+    }); // what goes in the prev here? its not attached to any variable? (is it like useState?)
   }, []);
 
   const fetchSuggestion = useCallback(async (type: string, editor: any) => {
-    console.log("Fetching AI suggestion...");
-    console.log("AI Suggestions Enabled:", state.isEnabled);
-    console.log("Editor Instance Available:", !!editor);
+    if (!isEnabledRef.current || !editor || isFetchingRef.current) {
+      return;
+    }
 
-    // Use functional state update to get fresh state
-    setState((currentState) => {
-      if (!currentState.isEnabled) {
-        console.warn("AI suggestions are disabled.");
-        return currentState;
+    const model = editor.getModel(); // this code is related to monaco editor
+    const cursorPosition = editor.getPosition();
+
+    if (!model || !cursorPosition) {
+      return;
+    }
+
+    isFetchingRef.current = true;
+    setState((prev) => ({ ...prev, isLoading: true }));
+
+    try {
+      const payload = {
+        fileContent: model.getValue(),
+        cursorLine: cursorPosition.lineNumber - 1,
+        cursorColumn: cursorPosition.column - 1,
+        suggestionType: type, // in the backend we will accept these values
+      };
+
+      const response = await fetch("/api/code-completion", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload),
+      });
+
+      if (!response.ok) {
+        throw new Error(`API responded with status ${response.status}`);
       }
 
-      // need to pass this editor from frontend side
-      if (!editor) {
-        console.warn("Editor instance is not available.");
-        return currentState;
+      // if ai send a suggestion, store the suggestion ALONG with the cursor position (this will be provided by the backend)
+      const data = await response.json();
+
+      if (!isEnabledRef.current) {
+        return;
       }
 
-      const model = editor.getModel(); // this code is related to monaco editor
-      const cursorPosition = editor.getPosition();
-
-      if (!model || !cursorPosition) {
-        console.warn("Editor model or cursor position is not available.");
-        return currentState;
+      if (data.suggestion) {
+        const suggestionText = data.suggestion.trim();
+        setState((prev) => ({
+          ...prev,
+          suggestion: suggestionText,
+          position: {
+            line: cursorPosition.lineNumber,
+            column: cursorPosition.column,
+          },
+        }));
       }
-
-      // Set loading state immediately
-      const newState = { ...currentState, isLoading: true };
-
-      // Perform the async operation (also this is an immediately invoked function, a function that calls immediately? is it shortform for just storing that function in a ref then call it in the next line?)
-      (async () => {
-        try {
-          const payload = {
-            fileContent: model.getValue(),
-            cursorLine: cursorPosition.lineNumber - 1,
-            cursorColumn: cursorPosition.column - 1,
-            suggestionType: type, // in the backend we will accept these values
-          };
-          console.log("Request payload:", payload);
-
-          const response = await fetch("/api/code-suggestion", {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify(payload),
-          });
-
-          if (!response.ok) {
-            throw new Error(`API responded with status ${response.status}`);
-          }
-
-          // if ai send a suggestion, store the suggestion ALONG with the cursor position (this will be provided by the backend)
-          const data = await response.json();
-          console.log("API response:", data);
-
-          if (data.suggestion) {
-            const suggestionText = data.suggestion.trim();
-            setState((prev) => ({
-              ...prev,
-              suggestion: suggestionText,
-              position: {
-                line: cursorPosition.lineNumber,
-                column: cursorPosition.column,
-              },
-              isLoading: false,
-            }));
-          } else {
-            console.warn("No suggestion received from API.");
-            setState((prev) => ({ ...prev, isLoading: false }));
-          }
-        } catch (error) {
-          console.error("Error fetching code suggestion:", error);
-          setState((prev) => ({ ...prev, isLoading: false }));
-        }
-      })();
-
-      return newState; // why do we need to return the newState???
-    });
-  }, []); // Remove state.isEnabled from dependencies to prevent stale closures
+    } catch (error) {
+      console.error("Error fetching code suggestion:", error);
+    } finally {
+      isFetchingRef.current = false;
+      setState((prev) => ({ ...prev, isLoading: false }));
+    }
+  }, []);
 
   // automatically append the ai suggestion
   const acceptSuggestion = useCallback((editor: any, monaco: any) => {

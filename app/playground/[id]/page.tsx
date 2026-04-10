@@ -47,6 +47,7 @@ import LoadingStep from "@/components/ui/loader";
 import { findFilePath } from "@/modules/playground/lib";
 import { toast } from "sonner";
 import ToggleAI from "@/modules/playground/components/toggle-ai";
+import { useAISuggestions } from "@/modules/playground/hooks/useAISuggestion";
 
 function MainPlaygroundPage() {
   const { id } = useParams<{ id: string }>();
@@ -55,6 +56,8 @@ function MainPlaygroundPage() {
 
   const { playgroundData, templateData, isLoading, error, saveTemplateData } =
     usePlayground(id);
+
+  const aiSuggestions = useAISuggestions();
 
   const {
     activeFileId,
@@ -165,9 +168,6 @@ function MainPlaygroundPage() {
     },
     [handleRenameFolder, saveTemplateData],
   );
-
-  console.log("template data: ", templateData);
-  console.log("playground data: ", playgroundData);
 
   const activeFile = openFiles.find((file) => file.id === activeFileId);
   const hasUnsavedChanges = openFiles.some((file) => file.hasUnsavedChanges); // new keyword some?
@@ -422,9 +422,9 @@ function MainPlaygroundPage() {
                 </Tooltip>
 
                 <ToggleAI
-                  isEnabled={true}
-                  onToggle={() => {}}
-                  suggestionLoading={false}
+                  isEnabled={false} // never toggle the AI.. it lags my computer for some reason.
+                  onToggle={aiSuggestions.toggleEnabled}
+                  suggestionLoading={aiSuggestions.isLoading}
                 />
 
                 <Button variant={"default"} size={"icon"}>
@@ -516,6 +516,18 @@ function MainPlaygroundPage() {
                           activeFileId &&
                             updateFileContent(activeFileId, value); // what is the value? we need this for the ctrl + s shortcut to work?
                         }}
+                        suggestion={aiSuggestions.suggestion}
+                        suggestionLoading={aiSuggestions.isLoading}
+                        suggestionPosition={aiSuggestions.position}
+                        onAcceptSuggestion={(editor, monaco) =>
+                          aiSuggestions.acceptSuggestion(editor, monaco)
+                        }
+                        onRejectSuggestion={(editor) =>
+                          aiSuggestions.rejectSuggestion(editor)
+                        }
+                        onTriggerSuggestion={(type, editor) =>
+                          aiSuggestions.fetchSuggestion(type, editor)
+                        }
                       />
                     </ResizablePanel>
                     {isPreviewVisible && (

@@ -156,8 +156,8 @@ async function generateSuggestion(prompt: string): Promise<string> {
         prompt,
         stream: false,
         options: {
-          temperature: 0.7, // means how much randomness, like out-of-the-box type code.
-          max_tokens: 300,
+          temperature: 0.2, // lower randomness helps autocomplete return faster and steadier
+          num_predict: 120,
         },
       }),
     });
